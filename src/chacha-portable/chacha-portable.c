@@ -96,14 +96,17 @@ static void initialize_state(
     x(8) x(9) x(10) x(11) x(12) x(13) x(14) x(15)
 
 static void core_block(const uint32_t *restrict start, uint32_t *restrict output) {
-    // instead of working on the output array, 
+    int i;
+    // instead of working on the output array,
     // we let the compiler allocate 16 local variables on the stack
-    #define __LV(i) uint32_t __s##i = start[i];
-    TIMES16(__LV)
+    #define __LV_D(i) uint32_t __s##i;
+    #define __LV_A(i) __s##i = start[i];
+    TIMES16(__LV_D)
+    TIMES16(__LV_A)
 
     #define __Q(a,b,c,d) Qround(__s##a, __s##b, __s##c, __s##d)
 
-    for (int i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++) {
         __Q(0, 4,  8, 12);
         __Q(1, 5,  9, 13);
         __Q(2, 6, 10, 14);
@@ -138,13 +141,18 @@ static void core_block(const uint32_t *restrict start, uint32_t *restrict output
 #define index8_32(a, ix) ((a) + ((ix) * sizeof(uint32_t)))
 
 #define xor32_blocks(dest, source, pad, words) \
-    for (unsigned int __i = 0; __i < words; __i++) { \
+{ \
+    unsigned int __i; \
+    for (__i = 0; __i < words; __i++) { \
         xor32_le(index8_32(dest, __i), index8_32(source, __i), (pad) + __i) \
-    }
+    } \
+}
 
 
 static void xor_block(uint8_t *restrict dest, const uint8_t *restrict source, const uint32_t *restrict pad, unsigned int chunk_size) {
-    unsigned int full_blocks = chunk_size / sizeof(uint32_t);
+    unsigned int full_blocks;
+
+    full_blocks = chunk_size / sizeof(uint32_t);
     // have to be carefull, we are going back from uint32 to uint8, so endianess matters again
     xor32_blocks(dest, source, pad, full_blocks)
 
@@ -169,26 +177,29 @@ static void xor_block(uint8_t *restrict dest, const uint8_t *restrict source, co
 }
 
 void chacha20_xor_stream(
-        uint8_t *restrict dest, 
-        const uint8_t *restrict source, 
+        uint8_t *restrict dest,
+        const uint8_t *restrict source,
         size_t length,
         const uint8_t key[CHACHA20_KEY_SIZE],
         const uint8_t nonce[CHACHA20_NONCE_SIZE],
         uint32_t counter
 ) {
     uint32_t state[CHACHA20_STATE_WORDS];
-    initialize_state(state, key, nonce, counter);
-
     uint32_t pad[CHACHA20_STATE_WORDS];
-    size_t full_blocks = length / CHACHA20_BLOCK_SIZE;
-    for (size_t b = 0; b < full_blocks; b++) {
+    size_t full_blocks;
+    size_t b;
+    unsigned int last_block;
+
+    full_blocks = length / CHACHA20_BLOCK_SIZE;
+    initialize_state(state, key, nonce, counter);
+    for (b = 0; b < full_blocks; b++) {
         core_block(state, pad);
         increment_counter(state);
         xor32_blocks(dest, source, pad, CHACHA20_STATE_WORDS)
         dest += CHACHA20_BLOCK_SIZE;
         source += CHACHA20_BLOCK_SIZE;
     }
-    unsigned int last_block = (unsigned int)(length % CHACHA20_BLOCK_SIZE);
+    last_block = (unsigned int)(length % CHACHA20_BLOCK_SIZE);
     if (last_block > 0 ) {
         core_block(state, pad);
         xor_block(dest, source, pad, last_block);
@@ -206,9 +217,12 @@ void chacha20_xor_stream(
     (target)[3] = U8(*(source) >> 24);
 
 #define serialize(poly_key, result) \
-    for (unsigned int i = 0; i < 32 / sizeof(uint32_t); i++) { \
+{ \
+    unsigned int i; \
+    for (i = 0; i < 32 / sizeof(uint32_t); i++) { \
         store32_le(index8_32(poly_key, i), result + i); \
-    }
+    } \
+}
 #endif
 
 

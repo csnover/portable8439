@@ -39,10 +39,10 @@ static void poly1305_calculate_mac(
     size_t ad_size
 ) {
     // init poly key (section 2.6)
-    uint8_t poly_key[__POLY1305_KEY_SIZE] = {0}; 
-    rfc8439_keygen(poly_key, key, nonce);
+    uint8_t poly_key[__POLY1305_KEY_SIZE] = {0};
     // start poly1305 mac
     poly1305_context poly_ctx;
+    rfc8439_keygen(poly_key, key, nonce);
     poly1305_init(&poly_ctx, poly_key);
 
     if (ad != NULL && ad_size > 0) {
